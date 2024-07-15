@@ -1,0 +1,105 @@
+version: "3.8"
+
+services:
+  vvved-com-db:
+    image: mysql:latest
+    container_name: 'vvved.app.db'
+    #command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    ports:
+      - '${FORWARD_DB_PORT:-3311}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: vvveb
+      MYSQL_DATABASE: vvveb
+      MYSQL_USER: vvveb
+      MYSQL_PASSWORD: vvveb
+    volumes:
+      - vvved-com-db:/var/lib/mysql
+    networks:
+      - vvved-com-net
+
+  vvved-com-php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 'vvved.app.php'
+    environment:
+      VVVEB_HOST: vvved-com-db
+      VVVEB_PASSWORD: vvveb
+      DB_HOST: vvved-com-db
+      DB_DATABASE: vvveb
+      DB_USER: vvveb
+      DB_PASSWORD: vvveb
+      DB_ENGINE: mysqli
+    volumes:
+      - ./Vvveb:/var/www/html/
+    links:
+      - vvved-com-db:mysql
+    depends_on:
+      - vvved-com-db
+    networks:
+      - vvved-com-net
+
+  # uncomment lines bellow for auto install
+  #vvveb-install:
+    #build:
+      #context: .
+    #volumes:
+      #- ./:/var/www/html/
+    #entrypoint:
+      #[
+        #"bash",
+        #"-c",
+        #"sleep 5 && php cli.php install module=index host=db user=vvveb password=vvveb database=vvveb admin[email]=admin@vvveb.com admin[password]=admin",
+      #]
+    #depends_on:
+      #- php
+    #networks:
+      #- internal
+
+  vvved-com-nginx:
+    image: nginx:alpine
+    container_name: 'vvved.app.nginx'
+    ports:
+      - "8086:80"
+    volumes:
+      - ./Vvveb:/var/www/html/
+      - ./nginx-docker.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - vvved-com-php
+    networks:
+      - vvved-com-net
+
+  vvved-com-phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: 'vvved.app.phpmyadmin'
+    ports:
+      - "8084:80"
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_USER=vvveb
+      - PMA_PASSWORD=vvveb
+      - PMA_HOST=db
+      - PMA_PORT=3306
+    depends_on:
+      - vvved-com-db
+    networks:
+      - vvved-com-net
+  vvved-com-redis:
+    image: 'redis:alpine'
+    container_name: 'vvved.app.redis'
+    ports:
+      - '${FORWARD_REDIS_PORT:-6382}:6379'
+    volumes:
+      - 'vvved-com-redis:/data'
+    networks:
+      - vvved-com-net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+volumes:
+  vvved-com-db:
+  vvved-com-redis:
+
+networks:
+  vvved-com-net:
+    driver: bridge
